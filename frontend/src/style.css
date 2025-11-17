@@ -1,26 +1,228 @@
-html {
-    background-color: rgba(27, 38, 54, 1);
-    text-align: center;
-    color: white;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 body {
-    margin: 0;
-    color: white;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
-}
-
-@font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 400;
-    src: local(""),
-    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    overflow: hidden;
 }
 
 #app {
+    width: 100vw;
     height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    padding: 20px;
+    background: #252525;
+    border-bottom: 1px solid #333;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.header h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 10px;
+}
+
+.header-stats {
+    display: flex;
+    gap: 30px;
+    font-size: 14px;
+    color: #b0b0b0;
+}
+
+.header-stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.header-stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    color: #808080;
+}
+
+.header-stat-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #4CAF50;
+}
+
+.content {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+}
+
+.section {
+    background: #252525;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #333;
+}
+
+.section-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.stat-item {
+    background: #2a2a2a;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #333;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #808080;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+}
+
+.stat-subvalue {
+    font-size: 12px;
+    color: #b0b0b0;
+    margin-top: 4px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #333;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50, #45a049);
+    transition: width 0.3s ease;
+}
+
+.process-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.process-table thead {
+    background: #2a2a2a;
+}
+
+.process-table th {
+    padding: 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: #b0b0b0;
+    text-transform: uppercase;
+    border-bottom: 2px solid #333;
+}
+
+.process-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #2a2a2a;
+    font-size: 13px;
+}
+
+.process-table tbody tr:hover {
+    background: #2a2a2a;
+}
+
+.process-name {
+    font-weight: 500;
+    color: #fff;
+}
+
+.process-pid {
+    color: #808080;
+}
+
+.process-state {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.process-state.running {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.process-state.sleeping {
+    background: #2196F3;
+    color: #fff;
+}
+
+.process-state.stopped {
+    background: #f44336;
+    color: #fff;
+}
+
+.refresh-info {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #2a2a2a;
+    padding: 10px 15px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #808080;
+    border: 1px solid #333;
+}
+
+.error {
+    background: #f44336;
+    color: #fff;
+    padding: 15px;
+    border-radius: 6px;
+    margin: 20px;
+}
+
+.loading {
     text-align: center;
+    padding: 50px;
+    font-size: 18px;
+    color: #808080;
+}
+
+.cpu-icon, .memory-icon, .process-icon {
+    width: 20px;
+    height: 20px;
+    display: inline-block;
 }
