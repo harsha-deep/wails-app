@@ -1,12 +1,14 @@
 package main
 
 import (
-	"bufio"
+	"context"
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
-	"time"
+	"sort"
+
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/process"
 )
 
 // SystemStats holds all system statistics
@@ -51,10 +53,7 @@ type ProcessInfo struct {
 	Threads int     `json:"threads"`
 }
 
-var lastCPUStats CPUStats
-var lastCPUTime time.Time
-
-// GetSystemStats returns current system statistics
+// GetSystemStats returns current system statistics (keeps same signature)
 func (a *App) GetSystemStats() (*SystemStats, error) {
 	stats := &SystemStats{}
 
@@ -82,207 +81,159 @@ func (a *App) GetSystemStats() (*SystemStats, error) {
 	return stats, nil
 }
 
-// getCPUStats reads CPU statistics from /proc/stat and /proc/cpuinfo
+// getCPUStats uses gopsutil to populate CPUStats
 func getCPUStats() (CPUStats, error) {
-	stats := CPUStats{}
+	var stats CPUStats
 
-	// Read /proc/stat for CPU usage
-	file, err := os.Open("/proc/stat")
-	if err != nil {
-		return stats, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	if scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) > 0 && fields[0] == "cpu" {
-			if len(fields) >= 5 {
-				stats.User, _ = strconv.ParseUint(fields[1], 10, 64)
-				stats.System, _ = strconv.ParseUint(fields[3], 10, 64)
-				stats.Idle, _ = strconv.ParseUint(fields[4], 10, 64)
-			}
-		}
+	// CPU times for aggregates (user, system, idle)
+	times, err := cpu.Times(false)
+	if err == nil && len(times) > 0 {
+		stats.User = uint64(times[0].User)
+		stats.System = uint64(times[0].System)
+		stats.Idle = uint64(times[0].Idle)
 	}
 
-	// Calculate CPU usage percentage
-	if !lastCPUTime.IsZero() {
-		totalDelta := float64((stats.User + stats.System + stats.Idle) - (lastCPUStats.User + lastCPUStats.System + lastCPUStats.Idle))
-		idleDelta := float64(stats.Idle - lastCPUStats.Idle)
-		if totalDelta > 0 {
-			stats.Usage = ((totalDelta - idleDelta) / totalDelta) * 100
-		}
+	// CPU percentage (overall)
+	// cpu.Percent with interval 0 returns instantaneous since last call on some systems
+	percentages, err := cpu.Percent(0, false)
+	if err == nil && len(percentages) > 0 {
+		stats.Usage = percentages[0]
 	}
 
-	lastCPUStats = stats
-	lastCPUTime = time.Now()
-
-	// Read /proc/cpuinfo for CPU model and core count
-	cpuInfo, err := os.ReadFile("/proc/cpuinfo")
+	// CPU core count (logical)
+	cores, err := cpu.Counts(true)
 	if err == nil {
-		lines := strings.Split(string(cpuInfo), "\n")
-		coreCount := 0
-		for _, line := range lines {
-			if strings.HasPrefix(line, "model name") {
-				parts := strings.Split(line, ":")
-				if len(parts) > 1 && stats.ModelName == "" {
-					stats.ModelName = strings.TrimSpace(parts[1])
-				}
-			}
-			if strings.HasPrefix(line, "processor") {
-				coreCount++
-			}
-		}
-		stats.Cores = coreCount
+		stats.Cores = cores
+	}
+
+	// CPU model name from cpu.Info()
+	info, err := cpu.Info()
+	if err == nil && len(info) > 0 {
+		stats.ModelName = info[0].ModelName
 	}
 
 	return stats, nil
 }
 
-// getMemoryStats reads memory statistics from /proc/meminfo
+// getMemoryStats uses gopsutil to populate MemoryStats
 func getMemoryStats() (MemoryStats, error) {
-	stats := MemoryStats{}
+	var stats MemoryStats
 
-	file, err := os.Open("/proc/meminfo")
+	vm, err := mem.VirtualMemory()
 	if err != nil {
 		return stats, err
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-
-		value, _ := strconv.ParseUint(fields[1], 10, 64)
-		// Convert from KB to bytes
-		value *= 1024
-
-		switch fields[0] {
-		case "MemTotal:":
-			stats.Total = value
-		case "MemAvailable:":
-			stats.Available = value
-		case "MemFree:":
-			stats.Free = value
-		case "Buffers:":
-			stats.Buffers = value
-		case "Cached:":
-			stats.Cached = value
-		case "SwapTotal:":
-			stats.SwapTotal = value
-		case "SwapFree:":
-			stats.SwapFree = value
-		}
+	stats.Total = vm.Total
+	stats.Available = vm.Available
+	stats.Free = vm.Free
+	stats.Buffers = vm.Buffers
+	stats.Cached = vm.Cached
+	stats.Used = vm.Used
+	if vm.Total > 0 {
+		stats.UsedPercent = vm.UsedPercent
 	}
+	// gopsutil returns swap info separately
+	s := vm.SwapTotal // vm doesn't include swap in all builds, use swap.VirtualMemory() below as fallback
 
-	stats.Used = stats.Total - stats.Available
-	if stats.Total > 0 {
-		stats.UsedPercent = float64(stats.Used) / float64(stats.Total) * 100
+	// Use swap.VirtualMemory for swap fields
+	swap, serr := mem.SwapMemory()
+	if serr == nil {
+		stats.SwapTotal = swap.Total
+		stats.SwapFree = swap.Free
+		stats.SwapUsed = swap.Used
+	} else {
+		// fallback to zeroes if unavailable
+		stats.SwapTotal = 0
+		stats.SwapFree = 0
+		stats.SwapUsed = 0
+		_ = s
 	}
-	stats.SwapUsed = stats.SwapTotal - stats.SwapFree
 
 	return stats, nil
 }
 
-// getProcessList reads process information from /proc
+// getProcessList enumerates processes, collects data, sorts by memory, returns top 50
 func getProcessList() ([]ProcessInfo, error) {
-	processes := []ProcessInfo{}
+	ctx := context.Background()
 
-	files, err := os.ReadDir("/proc")
+	procs, err := process.Processes()
 	if err != nil {
-		return processes, err
+		return nil, err
 	}
 
-	for _, f := range files {
-		if !f.IsDir() {
-			continue
-		}
+	infos := make([]ProcessInfo, 0, len(procs))
 
-		// Check if directory name is a number (PID)
-		pid, err := strconv.Atoi(f.Name())
+	// Collect info (best-effort; skip processes that error)
+	for _, p := range procs {
+		pi, err := getProcessInfoWithContext(ctx, p)
 		if err != nil {
 			continue
 		}
-
-		process, err := getProcessInfo(pid)
-		if err != nil {
-			continue // Skip processes we can't read
-		}
-
-		processes = append(processes, process)
-
-		// Limit to top 50 processes to avoid overwhelming the UI
-		if len(processes) >= 50 {
-			break
-		}
+		infos = append(infos, pi)
 	}
 
-	return processes, nil
+	// Sort by memory descending (largest first)
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Memory > infos[j].Memory
+	})
+
+	// Limit to top 50
+	if len(infos) > 50 {
+		infos = infos[:50]
+	}
+
+	return infos, nil
 }
 
-// getProcessInfo reads information for a specific process
-func getProcessInfo(pid int) (ProcessInfo, error) {
-	info := ProcessInfo{PID: pid}
+// getProcessInfoWithContext reads process details using gopsutil's Process object
+// getProcessInfoWithContext reads process details using gopsutil's Process object
+func getProcessInfoWithContext(ctx context.Context, p *process.Process) (ProcessInfo, error) {
+	info := ProcessInfo{}
+	pid := int(p.Pid)
+	info.PID = pid
 
-	// Read process name from /proc/[pid]/comm
-	commPath := fmt.Sprintf("/proc/%d/comm", pid)
-	commData, err := os.ReadFile(commPath)
-	if err != nil {
-		return info, err
-	}
-	info.Name = strings.TrimSpace(string(commData))
-
-	// Read process status from /proc/[pid]/status
-	statusPath := fmt.Sprintf("/proc/%d/status", pid)
-	statusFile, err := os.Open(statusPath)
-	if err != nil {
-		return info, err
-	}
-	defer statusFile.Close()
-
-	scanner := bufio.NewScanner(statusFile)
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
+	// Name
+	if name, err := p.NameWithContext(ctx); err == nil {
+		info.Name = name
+	} else {
+		if exe, err2 := p.ExeWithContext(ctx); err2 == nil {
+			info.Name = exe
 		}
+	}
 
-		switch fields[0] {
-		case "State:":
-			info.State = fields[1]
-		case "Threads:":
-			info.Threads, _ = strconv.Atoi(fields[1])
-		case "VmRSS:":
-			// Memory in KB, convert to bytes
-			mem, _ := strconv.ParseUint(fields[1], 10, 64)
-			info.Memory = mem * 1024
+	// Status / State: StatusWithContext can return []string
+	if statusSlice, err := p.StatusWithContext(ctx); err == nil {
+		if len(statusSlice) > 0 {
+			// Use the first status token (e.g., "R", "S"). If you prefer a joined string:
+			// info.State = strings.Join(statusSlice, ",")
+			info.State = statusSlice[0]
 		}
+	}
+
+	// CPU percent (best-effort)
+	if cpuPct, err := p.CPUPercentWithContext(ctx); err == nil {
+		info.CPU = cpuPct
+	}
+
+	// Memory RSS
+	if mi, err := p.MemoryInfoWithContext(ctx); err == nil {
+		info.Memory = mi.RSS
+	}
+
+	// Threads
+	if th, err := p.NumThreadsWithContext(ctx); err == nil {
+		info.Threads = int(th)
 	}
 
 	return info, nil
 }
 
-// getUptime reads system uptime from /proc/uptime
+// getUptime returns system uptime in seconds
 func getUptime() (float64, error) {
-	data, err := os.ReadFile("/proc/uptime")
+	u, err := host.Uptime()
 	if err != nil {
 		return 0, err
 	}
-
-	fields := strings.Fields(string(data))
-	if len(fields) > 0 {
-		uptime, err := strconv.ParseFloat(fields[0], 64)
-		if err != nil {
-			return 0, err
-		}
-		return uptime, nil
-	}
-
-	return 0, fmt.Errorf("invalid uptime format")
+	return float64(u), nil
 }
