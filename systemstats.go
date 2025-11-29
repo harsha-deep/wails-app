@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -12,20 +11,20 @@ import (
 
 // SystemStats holds all system statistics
 type SystemStats struct {
-	CPU       CPUStats       `json:"cpu"`
-	Memory    MemoryStats    `json:"memory"`
-	Processes []ProcessInfo  `json:"processes"`
-	Uptime    float64        `json:"uptime"`
+	CPU       CPUStats      `json:"cpu"`
+	Memory    MemoryStats   `json:"memory"`
+	Processes []ProcessInfo `json:"processes"`
+	Uptime    float64       `json:"uptime"`
 }
 
 // CPUStats holds CPU information
 type CPUStats struct {
-	Usage      float64  `json:"usage"`
-	Cores      int      `json:"cores"`
-	ModelName  string   `json:"modelName"`
-	User       uint64   `json:"user"`
-	System     uint64   `json:"system"`
-	Idle       uint64   `json:"idle"`
+	Usage     float64 `json:"usage"`
+	Cores     int     `json:"cores"`
+	ModelName string  `json:"modelName"`
+	User      uint64  `json:"user"`
+	System    uint64  `json:"system"`
+	Idle      uint64  `json:"idle"`
 }
 
 // MemoryStats holds memory information
@@ -120,7 +119,7 @@ func getCPUStats() (CPUStats, error) {
 	lastCPUTime = time.Now()
 
 	// Read /proc/cpuinfo for CPU model and core count
-	cpuInfo, err := ioutil.ReadFile("/proc/cpuinfo")
+	cpuInfo, err := os.ReadFile("/proc/cpuinfo")
 	if err == nil {
 		lines := strings.Split(string(cpuInfo), "\n")
 		coreCount := 0
@@ -194,7 +193,7 @@ func getMemoryStats() (MemoryStats, error) {
 func getProcessList() ([]ProcessInfo, error) {
 	processes := []ProcessInfo{}
 
-	files, err := ioutil.ReadDir("/proc")
+	files, err := os.ReadDir("/proc")
 	if err != nil {
 		return processes, err
 	}
@@ -232,7 +231,7 @@ func getProcessInfo(pid int) (ProcessInfo, error) {
 
 	// Read process name from /proc/[pid]/comm
 	commPath := fmt.Sprintf("/proc/%d/comm", pid)
-	commData, err := ioutil.ReadFile(commPath)
+	commData, err := os.ReadFile(commPath)
 	if err != nil {
 		return info, err
 	}
@@ -271,7 +270,7 @@ func getProcessInfo(pid int) (ProcessInfo, error) {
 
 // getUptime reads system uptime from /proc/uptime
 func getUptime() (float64, error) {
-	data, err := ioutil.ReadFile("/proc/uptime")
+	data, err := os.ReadFile("/proc/uptime")
 	if err != nil {
 		return 0, err
 	}
